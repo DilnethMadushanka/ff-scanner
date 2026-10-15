@@ -15,8 +15,8 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Set website address
@@ -36,6 +36,7 @@ jobs:
           cp scanner/dist/FFScanner.exe public/FFScanner.exe
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -- scanner/signatures.json   # the address was only patched in for the build
           git add public/FFScanner.exe
           git commit -m "Build FFScanner.exe" || echo "No change"
           git pull --rebase origin main
