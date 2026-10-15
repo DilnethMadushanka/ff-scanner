@@ -35,7 +35,7 @@ except ImportError:  # not Windows
     winreg = None
 
 APP_NAME = "FF Scanner"
-VERSION = "3.0"
+VERSION = "3.1"
 
 IS_WINDOWS = os.name == "nt"
 HIGH, MEDIUM, INFO = "HIGH", "MEDIUM", "INFO"
@@ -1646,6 +1646,15 @@ def load_config():
         return json.load(f)
 
 
+def bundled_setting(name):
+    """A value from the signatures.json built into the exe (an older copy next to the exe may lack it)."""
+    try:
+        with open(os.path.join(getattr(sys, "_MEIPASS", base_dir()), "signatures.json"), encoding="utf-8") as f:
+            return json.load(f).get(name)
+    except Exception:
+        return None
+
+
 def arg_value(name):
     if name in sys.argv:
         i = sys.argv.index(name)
@@ -1697,6 +1706,12 @@ def http_json(url, payload=None, timeout=30):
 def online_session(server, interactive):
     """Ask for the organizer's session PIN and fetch its settings. Returns the session dict or None (offline)."""
     pin = arg_value("--pin")
+    if pin is None and getattr(sys, "frozen", False):
+        # the website names each download FFScanner-<PIN>.exe, so the player doesn't have to type it
+        m = re.search(r"(?<!\d)(\d{8})(?!\d)", os.path.basename(sys.executable))
+        if m:
+            pin = m.group(1)
+            print(f"  Session PIN {pin} (from the download)")
     for attempt in range(3):
         if pin is None:
             if not interactive:
@@ -1732,7 +1747,7 @@ def main():
         if interactive:
             input("\n  Press Enter to close...")
         return 2
-    server = (arg_value("--server") or cfg.get("server_url") or "").rstrip("/")
+    server = (arg_value("--server") or cfg.get("server_url") or bundled_setting("server_url") or "").rstrip("/")
     session = online_session(server, interactive) if server and "--offline" not in sys.argv else None
     if session:
         games = cfg.get("games", {})

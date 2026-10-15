@@ -65,17 +65,20 @@ $("#new-form").addEventListener("submit", async e => {
     const phone = session.mode !== "pc" ? "<li>On the phone, turn on USB debugging and plug it into the PC.</li>" : "";
     box.innerHTML = `<div class="created"><div><div class="lbl">Session PIN</div><div class="big">${esc(session.pin)}</div>
       <div>${esc(session.player || "No name")} · ${esc(session.gameName)} · ${esc(MODE[session.mode])}</div></div>
-      <ol><li>Download the scanner: <a href="/FFScanner.exe">${esc(location.origin)}/FFScanner.exe</a></li>${phone}
-      <li>Right-click FFScanner.exe and choose Run as administrator.</li><li>Type the PIN when it asks. The result shows here when the scan finishes.</li></ol>
-      <button type="button" id="copy-pin">Copy PIN</button></div>`;
+      <ol><li>Send the player this download link: <a href="/dl/${esc(session.pin)}">${esc(location.origin)}/dl/${esc(session.pin)}</a></li>${phone}
+      <li>They right-click FFScanner-${esc(session.pin)}.exe and choose Run as administrator. Don't rename the file: the PIN is in its name.</li>
+      <li>The scan starts with this session's settings and the result shows here when it finishes.</li></ol>
+      <div class="topbar"><button type="button" id="copy-pin">Copy PIN</button><button type="button" id="copy-link">Copy link</button></div>
+      </div>`;
     $("#n-player").value = ""; setMsg("");
     await load();
   } catch (err) { setMsg(err.message, "err"); }
 });
 $("#created").addEventListener("click", async e => {
-  if (e.target.id !== "copy-pin") return;
+  if (e.target.id !== "copy-pin" && e.target.id !== "copy-link") return;
   const pin = $("#created .big").textContent;
-  try { await navigator.clipboard.writeText(pin); e.target.textContent = "Copied"; } catch (x) { e.target.textContent = pin; }
+  const text = e.target.id === "copy-pin" ? pin : `${location.origin}/dl/${pin}`;
+  try { await navigator.clipboard.writeText(text); e.target.textContent = "Copied"; } catch (x) { e.target.textContent = text; }
 });
 
 function renderList() {

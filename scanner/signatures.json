@@ -5,7 +5,7 @@
   "max_hash_size_mb": 150,
   "use_adb": true,
 
-  "server_url": "",
+  "server_url": "https://ff-scanner.vercel.app",
 
   "keywords_high": [
     "aimbot", "aim bot", "aimlock", "aim lock", "auto headshot", "autoheadshot",

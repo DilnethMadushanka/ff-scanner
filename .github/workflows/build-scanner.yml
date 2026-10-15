@@ -24,7 +24,7 @@ jobs:
         env:
           SERVER_URL: ${{ vars.SCANNER_SERVER_URL }}
         run: |
-          python -c "import json,os; p='signatures.json'; c=json.load(open(p,encoding='utf-8')); c['server_url']=os.environ.get('SERVER_URL','').rstrip('/'); json.dump(c,open(p,'w',encoding='utf-8'),indent=2,ensure_ascii=False)"
+          python -c "import json,os; p='signatures.json'; c=json.load(open(p,encoding='utf-8')); u=os.environ.get('SERVER_URL','').rstrip('/'); c['server_url']=u or c.get('server_url',''); json.dump(c,open(p,'w',encoding='utf-8'),indent=2,ensure_ascii=False)"
       - name: Build exe
         working-directory: scanner
         run: |

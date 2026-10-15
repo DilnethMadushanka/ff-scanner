@@ -1,6 +1,28 @@
 {
-  "functions": { "api/*.js": { "maxDuration": 15 } },
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 15
+    }
+  },
   "headers": [
-    { "source": "/FFScanner.exe", "headers": [{ "key": "Content-Disposition", "value": "attachment; filename=FFScanner.exe" }] }
+    {
+      "source": "/dl/:pin(\\d{8})",
+      "headers": [
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=FFScanner-:pin.exe"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/dl/:pin(\\d{8})",
+      "destination": "/FFScanner.exe"
+    }
   ]
 }
