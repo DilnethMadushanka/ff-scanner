@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 
@@ -37,7 +38,7 @@ except ImportError:  # not Windows
     winreg = None
 
 APP_NAME = "FF Scanner"
-VERSION = "3.3"
+VERSION = "3.4"
 
 IS_WINDOWS = os.name == "nt"
 HIGH, MEDIUM, INFO = "HIGH", "MEDIUM", "INFO"
@@ -231,6 +232,22 @@ def utf16_strings(data, min_len=4):
 
 def ascii_strings(data, min_len=4):
     return [m.decode("latin-1") for m in re.findall(rb"[\x20-\x7e]{%d,}" % min_len, data)]
+
+
+VIDEO_SITES = ("youtube.com", "youtu.be", "tiktok.com", "facebook.com", "fb.watch", "instagram.com", "twitch.tv")
+SEARCH_SITES = ("google.com", "google.lk", "bing.com", "duckduckgo.com", "yahoo.com", "yandex.com", "yandex.ru")
+
+
+def url_parts(url):
+    """(host, path) of a web address, lower case, without the query string."""
+    try:
+        u = urllib.parse.urlsplit(url)
+        host = (u.hostname or "").lower()
+        if host.startswith("www."):
+            host = host[4:]
+        return host, urllib.parse.unquote(u.path).lower()
+    except Exception:
+        return "", url.lower().split("?")[0]
 
 
 def both_encodings(word):
@@ -937,14 +954,22 @@ class Scanner:
                     pass
         hits = 0
         for action, url, label, when in sorted(rows, key=lambda r: -r[3]):
-            text = f"{label} {url}".lower()
+            host, page = url_parts(url)
+            # only the page title and the address itself; query strings hold random sign-in tokens
+            # ("...dFRida762..." is not Frida)
+            text = f"{label} {host}{page}".lower()
             level, why = None, ""
-            site = next((s for s in sites if s in url.lower()), None)
+            site = next((s for s in sites if s in host + page), None)
             if site:
                 level, why = HIGH, f"known hack website '{site}'"
             else:
                 hit = self.matcher.match(label if action == "Downloaded" else text)
-                if hit and hit[0] == HIGH:
+                video = any(host == v or host.endswith("." + v) for v in VIDEO_SITES)
+                search = any(host == v or host.endswith("." + v) for v in SEARCH_SITES) and action == "Visited"
+                if hit and hit[0] == HIGH and (video or search):
+                    level, why = MEDIUM, (f"watched a video about '{hit[1]}'" if video else f"searched for '{hit[1]}'") + \
+                        " (interest, not proof of use)"
+                elif hit and hit[0] == HIGH:
                     level, why = HIGH, f"contains '{hit[1]}'"
                 elif hit and any(w in text for w in ff_words):
                     level, why = MEDIUM, f"Free Fire page containing '{hit[1]}'"
@@ -1399,6 +1424,12 @@ class Scanner:
         pats = [p.lower() for p in self.cfg.get("deep_scan_patterns", [])] + [p for p in self.pkg_high if "." in p]
         pats = sorted(set(pats))
         enc = [(p, both_encodings(p)) for p in pats]
+        # an installed app leaves its own folder (/data/app/<package>-xxxx) or apk file name behind;
+        # a bare package name also appears in games' own anti-cheat lists, so it is only a lead
+        strong = {}
+        for p in pats:
+            forms = [f"/{p}-", f"{p}.apk", f"/data/data/{p}"] if "." in p else [f"{p}.apk"]
+            strong[p] = [both_encodings(x) for x in forms]
         up = env("USERPROFILE", os.path.expanduser("~"))
         pd = env("ProgramData", r"C:\ProgramData")
         pf, pf86 = env("ProgramFiles", r"C:\Program Files"), env("ProgramFiles(x86)", r"C:\Program Files (x86)")
@@ -1439,16 +1470,22 @@ class Scanner:
                                           f"{done * 100 // max(1, size)}% of {size // (1024 * 1024)} MB")
                         block = (tail + chunk).lower()
                         for p, (a, u) in enc:
-                            if p not in found and (a in block or u in block):
-                                found[p] = True
+                            if found.get(p) != "strong" and (a in block or u in block):
+                                hit = any(sa in block or su in block for sa, su in strong[p])
+                                found[p] = "strong" if hit else found.get(p, "weak")
                         tail = chunk[-200:]
             except Exception as e:
                 self.notes.append(f"Deep scan could not read {img} ({e}). Close the emulator and scan again.")
                 continue
-            for p in found:
-                lvl = HIGH if any(p.startswith(k) for k in self.pkg_high) or p in ("gameguardian", "frida-server") else MEDIUM
-                self.add(lvl, "Emulator disk", f"'{p}' in {img}",
-                         "Trace found inside the emulator's virtual disk. Leftovers stay here after an app is deleted.")
+            for p, kind in found.items():
+                if kind == "strong":
+                    self.add(HIGH, "Emulator disk", f"'{p}' app files in {img}",
+                             "The app's install folder or APK name is inside the emulator's virtual disk. "
+                             "Leftovers stay here after an app is deleted.")
+                else:
+                    self.add(MEDIUM, "Emulator disk", f"'{p}' text in {img}",
+                             "The name appears inside the emulator's disk, but not as an installed app. Games and "
+                             "anti-cheat code also list these names to detect them, so this alone is not proof.")
 
     def run_all(self):
         steps = [self.scan_processes, self.scan_emulator_modules, self.scan_folders,
