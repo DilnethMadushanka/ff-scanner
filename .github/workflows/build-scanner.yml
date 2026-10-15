@@ -1,0 +1,42 @@
+name: Build scanner
+
+# Builds FFScanner.exe on Windows and puts it in public/ so the website serves it at /FFScanner.exe.
+# Set the repository variable SCANNER_SERVER_URL (e.g. https://ff-scanner.vercel.app) so the exe talks to your site.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["scanner/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Set website address
+        working-directory: scanner
+        env:
+          SERVER_URL: ${{ vars.SCANNER_SERVER_URL }}
+        run: |
+          python -c "import json,os; p='signatures.json'; c=json.load(open(p,encoding='utf-8')); c['server_url']=os.environ.get('SERVER_URL','').rstrip('/'); json.dump(c,open(p,'w',encoding='utf-8'),indent=2,ensure_ascii=False)"
+      - name: Build exe
+        working-directory: scanner
+        run: |
+          python -m pip install pyinstaller==6.11.1
+          python -m PyInstaller --onefile --console --uac-admin --name FFScanner --add-data "signatures.json;." ff_scanner.py
+      - name: Publish to website folder
+        shell: bash
+        run: |
+          cp scanner/dist/FFScanner.exe public/FFScanner.exe
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/FFScanner.exe
+          git commit -m "Build FFScanner.exe" || echo "No change"
+          git pull --rebase origin main
+          git push origin HEAD:main

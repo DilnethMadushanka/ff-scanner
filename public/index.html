@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FF Scan Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a tournament check-in desk. List of scanned PCs on top, one report opens below with a section rail like the scanner's own report. */
+:root {
+  --bg: #f3f5f2; --panel: #ffffff; --raised: #e9ede8; --line: #d3dad2; --fg: #17201a; --mut: #5d6b62;
+  --accent: #1f8a4c; --accent-soft: #dcefe3;
+  --hi: #c62828; --hi-soft: #fbe3e1; --me: #b36200; --me-soft: #fbecd6; --ok: #1f7a43; --ok-soft: #dcf0e2; --in: #56646b; --in-soft: #e5eaec;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; --mono: "IBM Plex Mono", Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1411; --panel: #161d19; --raised: #1d2620; --line: #2a362f; --fg: #e4ece6; --mut: #93a399;
+  --accent: #4cc97f; --accent-soft: #173524;
+  --hi: #ff7a70; --hi-soft: #3d1715; --me: #f2a94b; --me-soft: #3a2810; --ok: #5fd28f; --ok-soft: #163322; --in: #a3b1b8; --in-soft: #222b2f;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1411; --panel: #161d19; --raised: #1d2620; --line: #2a362f; --fg: #e4ece6; --mut: #93a399;
+  --accent: #4cc97f; --accent-soft: #173524;
+  --hi: #ff7a70; --hi-soft: #3d1715; --me: #f2a94b; --me-soft: #3a2810; --ok: #5fd28f; --ok-soft: #163322; --in: #a3b1b8; --in-soft: #222b2f;
+  color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body { margin: 0 }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 20px }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px }
+h1 { margin: 0; font-size: 26px; letter-spacing: -.01em; text-wrap: balance }
+h1 span { color: var(--accent) }
+.lede { margin: 2px 0 0; color: var(--mut); max-width: 62ch }
+.tally { display: flex; gap: 8px; flex-wrap: wrap }
+.tally div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font-size: 13px; color: var(--mut) }
+.tally b { display: block; font-size: 20px; color: var(--fg); font-variant-numeric: tabular-nums }
+.tally .t-hi b { color: var(--hi) } .tally .t-me b { color: var(--me) } .tally .t-ok b { color: var(--ok) }
+
+.drop { border: 2px dashed var(--line); border-radius: 10px; padding: 18px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; background: var(--panel) }
+.drop.over { border-color: var(--accent); background: var(--accent-soft) }
+.drop p { margin: 0; flex: 1 1 280px; min-width: 0; color: var(--mut) }
+.drop p b { color: var(--fg) }
+.drop code, .mono { font-family: var(--mono); font-size: 13px }
+button, .btn { font: 600 14px var(--sans); border-radius: 7px; border: 1px solid var(--line); background: var(--raised); color: var(--fg); padding: 8px 14px; cursor: pointer }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg) }
+button.danger { color: var(--hi); border-color: var(--hi) }
+button:focus-visible, input:focus-visible, select:focus-visible, .row:focus-visible, .rail a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+#msg { font-size: 14px; margin: 0 }
+#msg.err { color: var(--hi) } #msg.ok { color: var(--ok) }
+
+.tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+.tools input, .tools select { font: 14px var(--sans); padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--fg) }
+.tools input { flex: 1 1 220px; min-width: 0 }
+
+.list { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto }
+table { width: 100%; border-collapse: collapse }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--mut); font-weight: 600; white-space: nowrap }
+tr:last-child td { border-bottom: 0 }
+.row { cursor: pointer } .row:hover { background: var(--raised) } .row.sel { background: var(--accent-soft) }
+.pin { font: 600 15px var(--mono); letter-spacing: .04em; color: var(--accent); white-space: nowrap }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap }
+.pill { display: inline-block; font: 700 11px var(--sans); letter-spacing: .06em; padding: 3px 8px; border-radius: 99px; white-space: nowrap }
+.v-SUSPICIOUS, .l-HIGH { background: var(--hi-soft); color: var(--hi) }
+.v-REVIEW, .l-MEDIUM { background: var(--me-soft); color: var(--me) }
+.v-CLEAN { background: var(--ok-soft); color: var(--ok) }
+.l-INFO { background: var(--in-soft); color: var(--in) }
+.tag { font-size: 11px; color: var(--mut); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; margin-left: 6px }
+.empty { padding: 34px 18px; text-align: center; color: var(--mut) }
+.empty b { color: var(--fg); display: block; font-size: 16px; margin-bottom: 4px }
+
+.report { display: grid; grid-template-columns: 230px minmax(0, 1fr); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden }
+.rail { background: var(--raised); border-right: 1px solid var(--line); padding: 14px 10px; display: grid; align-content: start; gap: 2px }
+.rail .grp { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--mut); margin: 12px 8px 4px }
+.rail .grp:first-child { margin-top: 0 }
+.rail a { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 6px; color: var(--fg); text-decoration: none; border-left: 3px solid transparent }
+.rail a:hover { background: var(--panel) }
+.rail a.on { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); font-weight: 600 }
+.rail a span { color: var(--mut); font-variant-numeric: tabular-nums } .rail a span.red { color: var(--hi); font-weight: 700 }
+.body { padding: 18px 20px 24px; min-width: 0; display: grid; gap: 14px; align-content: start }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 26px; align-items: flex-end; padding-bottom: 14px; border-bottom: 1px solid var(--line) }
+.meta .lbl { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--mut) }
+.meta .big { font: 600 30px var(--mono); color: var(--accent); letter-spacing: .05em; line-height: 1.1 }
+.meta .acts { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap }
+.verdict { border-radius: 9px; padding: 14px 18px; font-size: 24px; font-weight: 700 }
+.verdict small { display: block; font-size: 14px; font-weight: 400 }
+.verdict.v-CLEAN { color: var(--ok) }
+h2 { margin: 0; font-size: 19px }
+.sub { margin: -8px 0 0; color: var(--mut) }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px }
+.path { font-family: var(--mono); font-size: 13px; word-break: break-all; min-width: 220px }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px }
+.stats button { text-align: left; font-weight: 400; color: var(--mut); background: var(--raised) }
+.stats button b { display: block; font-size: 24px; color: var(--fg); font-variant-numeric: tabular-nums }
+ul.notes { margin: 0; padding-left: 20px; color: var(--mut) }
+.confirm { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px }
+.foot { color: var(--mut); font-size: 13px }
+
+@media (max-width: 760px) {
+  .report { grid-template-columns: 1fr }
+  .rail { border-right: 0; border-bottom: 1px solid var(--line); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) }
+  .rail .grp { grid-column: 1 / -1 }
+  .hide-sm { display: none }
+}
+@media (prefers-reduced-motion: no-preference) { .row, .rail a, button { transition: background .12s } }
+</style>
+<style>
+.login { max-width: 380px; margin: 12vh auto 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: grid; gap: 12px }
+.login input, .newform input, .newform select { font: 15px var(--sans); padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--fg); width: 100% }
+.newform { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px }
+.newform .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end }
+.newform label { display: grid; gap: 4px; font-size: 13px; color: var(--mut) }
+.created { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; background: var(--accent-soft); border-radius: 9px; padding: 14px 16px }
+.created .big { font: 600 40px var(--mono); color: var(--accent); letter-spacing: .06em }
+.created ol { margin: 0; padding-left: 20px; flex: 1 1 300px; min-width: 0 }
+.v-WAITING { background: var(--in-soft); color: var(--in) }
+.topbar { display: flex; gap: 8px; align-items: center }
+</style>
+</head>
+<body>
+<div class="wrap" id="login-view" hidden>
+  <form class="login" id="login-form">
+    <h1>FF <span>Scan Desk</span></h1>
+    <p class="lede">Organizer sign-in. Players don't need this page; they only run the scanner with the PIN you give them.</p>
+    <input id="pw" type="password" placeholder="Organizer password" autocomplete="current-password" aria-label="Organizer password" required>
+    <button class="primary" type="submit">Sign in</button>
+    <p id="login-msg" class="err" role="status"></p>
+  </form>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <header>
+    <div>
+      <h1>FF <span>Scan Desk</span></h1>
+      <p class="lede">Create a session PIN for each player, have them run the scanner with it, and the result appears here by itself.</p>
+    </div>
+    <div class="topbar"><div class="tally" id="tally" aria-live="polite"></div><button type="button" id="logout">Sign out</button></div>
+  </header>
+
+  <form class="newform" id="new-form">
+    <div class="fields">
+      <label>Player name or in-game ID<input id="n-player" maxlength="60" placeholder="e.g. Kasun_FF"></label>
+      <label>Game<select id="n-game"><option value="freefire">Free Fire / Free Fire MAX</option><option value="pubgm">PUBG Mobile / BGMI</option><option value="codm">Call of Duty Mobile</option><option value="all">All games</option></select></label>
+      <label>Check<select id="n-mode"><option value="pc">PC and emulator</option><option value="phone">Android phone (USB)</option><option value="both">Both</option></select></label>
+      <button class="primary" type="submit">Create session PIN</button>
+    </div>
+    <div id="created" hidden></div>
+    <p id="msg" role="status"></p>
+  </form>
+
+  <div class="tools">
+    <input id="q" type="search" placeholder="Search player, PIN or PC" aria-label="Search scans">
+    <select id="fv" aria-label="Filter by result">
+      <option value="">All results</option><option>WAITING</option><option>SUSPICIOUS</option><option>REVIEW</option><option>CLEAN</option>
+    </select>
+  </div>
+
+  <div class="list" id="list"><div class="empty"><b>Loading sessions…</b></div></div>
+  <div id="detail" hidden></div>
+  <p class="foot">The scanner is a screening aid. Renamed or private hacks and cleaned traces can still slip through, so talk to the player about anything flagged before deciding.</p>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "ff-scanner-web",
+  "private": true,
+  "type": "module",
+  "description": "FF Scanner website: organizer dashboard and report upload API for Vercel.",
+  "engines": { "node": ">=18" }
+}

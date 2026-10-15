@@ -1,0 +1,7 @@
+node_modules/
+.vercel/
+__pycache__/
+scanner/build/
+scanner/dist/
+scanner/*.spec
+scanner/reports/

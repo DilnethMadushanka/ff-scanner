@@ -1,0 +1,127 @@
+{
+  "_readme": "Edit this file to add new hack names. Keywords are matched case-insensitively against file names, process names, window titles, APK contents, deleted files and recently run programs. Short keywords (3 letters or less) only match as whole words, so 'esp' will not match 'response'. After editing, just run the scanner again; no rebuild needed as long as this file sits next to FFScanner.exe.",
+
+  "recent_days": 7,
+  "max_hash_size_mb": 150,
+  "use_adb": true,
+
+  "server_url": "",
+
+  "keywords_high": [
+    "aimbot", "aim bot", "aimlock", "aim lock", "auto headshot", "autoheadshot",
+    "headshot hack", "head shot hack", "magic bullet", "silent aim", "aimkill", "aim kill",
+    "wallhack", "wall hack", "esp hack", "ff hack", "freefire hack", "free fire hack",
+    "ff panel", "freefire panel", "free fire panel", "hack panel", "cheat panel", "panel ff",
+    "regedit ff", "ff regedit", "regedit freefire", "regedit free fire",
+    "mod menu", "modmenu", "antiban", "anti ban", "anti-ban",
+    "cheat engine", "cheatengine", "game guardian", "gameguardian",
+    "injector", "dll inject", "extreme injector", "xenos", "kdmapper",
+    "speedhack", "speed hack", "frida", "h4x", "ffh4x", "teleport hack", "fly hack", "no recoil", "norecoil",
+    "holograma", "aimfov", "fov hack", "bypass emulator", "emulator bypass", "emu bypass",
+    "lulubox", "xmodgames", "lucky patcher", "luckypatcher"
+  ],
+
+  "keywords_medium": [
+    "hack", "cheat", "esp", "inject", "bypass", "trainer",
+    "macro", "autohotkey", "ahk", "aim", "headshot", "sensi", "sensitivity booster",
+    "process hacker", "processhacker", "x64dbg", "x32dbg", "ollydbg", "dnspy",
+    "ksdumper", "ccleaner", "privazer", "bleachbit", "magisk", "xposed", "lsposed", "virtual space", "parallel space"
+  ],
+
+  "process_names_high": [
+    "cheatengine-x86_64.exe", "cheatengine-x86_64-sse4-avx2.exe", "cheatengine-i386.exe",
+    "cheatengine.exe", "xenos.exe", "xenos64.exe", "extreme injector v3.exe",
+    "kdmapper.exe", "ksdumper.exe"
+  ],
+
+  "process_names_medium": [
+    "processhacker.exe", "systeminformer.exe", "x64dbg.exe", "x32dbg.exe", "ollydbg.exe",
+    "dnspy.exe", "autohotkey.exe", "autohotkeyu64.exe", "autohotkey64.exe", "autoclicker.exe"
+  ],
+
+  "android_packages_high": [
+    "catch_.me_.if_.you_.can_", "com.cih.game_cih", "com.lulu.lulubox",
+    "com.xmodgame", "com.chelpus.lackypatch", "com.chelpus.luckypatcher",
+    "ru.aaaaaaac.installer", "com.gameguardian"
+  ],
+
+  "android_packages_medium": [
+    "com.topjohnwu.magisk", "eu.chainfire.supersu", "de.robv.android.xposed.installer",
+    "org.meowcat.edxposed.manager", "org.lsposed.manager", "com.lbe.parallel.intl",
+    "com.excelliance.multiaccounts", "com.vmos.glb", "bin.mt.plus",
+    "com.dts.freefireth.mod", "com.dts.freefiremax.mod"
+  ],
+
+  "driver_keywords": [
+    "kdmapper", "capcom", "iqvw64e", "gdrv", "rtcore64", "dbk64", "dbk32", "kprocesshacker"
+  ],
+
+  "known_bad_sha1": {
+    "_example_put_a_real_sha1_here_000000000000": "Example hack name (replace this line). Amcache keeps the SHA1 of programs that ran, even after they are deleted."
+  },
+
+  "content_keywords": [
+    "aimbot", "aim lock", "aimlock", "auto headshot", "magic bullet", "no recoil", "norecoil",
+    "wallhack", "esp line", "esp box", "esp name", "silent aim", "antiban", "anti ban",
+    "bypass emulator", "emulator bypass", "aim fov", "speed hack", "fly hack"
+  ],
+
+  "emulator_targets": [
+    "hd-player.exe", "dnplayer.exe", "androidemulatorex.exe", "androidemulatoren.exe", "aow_exe.exe",
+    "memu.exe", "noxvmhandle.exe", "mumuvmmheadless.exe", "com.dts.freefireth", "com.dts.freefiremax",
+    "com.tencent.ig", "com.pubg.imobile", "com.activision.callofduty.shooter", "libil2cpp.so", "libunity.so"
+  ],
+
+  "memory_apis": ["writeprocessmemory", "readprocessmemory", "virtualallocex", "createremotethread", "ntwritevirtualmemory"],
+
+  "anti_forensic_high": [
+    "usn deletejournal", "deletejournal", "wevtutil cl", "clear-eventlog", "remove-eventlog",
+    "vssadmin delete", "wmic shadowcopy delete", "sdelete", "cipher /w"
+  ],
+
+  "anti_forensic_medium": [
+    "add-mppreference", "disablerealtimemonitoring", "set-mppreference", "\\prefetch", "del /f /s /q",
+    "remove-item", "rd /s", "ccleaner", "privazer", "bleachbit", "shellbagsview", "lastactivityview"
+  ],
+
+  "deep_scan_patterns": [
+    "catch_.me_.if_.you_.can_", "com.lulu.lulubox", "com.xmodgame", "com.chelpus.lackypatch",
+    "gameguardian", "frida-server", "com.cih.game_cih", "ffh4x", "ff h4x"
+  ],
+
+  "games": {
+    "freefire": {
+      "name": "Free Fire / Free Fire MAX",
+      "official_packages": ["com.dts.freefireth", "com.dts.freefiremax"],
+      "name_hints": ["freefire", "free fire", "ffmax", "ff max"],
+      "context_words": ["free fire", "freefire", "garena", "ff "],
+      "keywords_high": ["ff hack", "ff panel", "ff injector", "ff aimbot", "ff headshot"]
+    },
+    "pubgm": {
+      "name": "PUBG Mobile / BGMI",
+      "official_packages": ["com.tencent.ig", "com.pubg.imobile", "com.pubg.krmobile", "com.vng.pubgmobile", "com.rekoo.pubgm", "com.tencent.tmgp.pubgmhd"],
+      "name_hints": ["pubg", "bgmi"],
+      "context_words": ["pubg", "bgmi", "krafton"],
+      "keywords_high": ["pubg hack", "pubg esp", "pubg aimbot", "pubg panel", "pubg mod", "bgmi hack", "bgmi esp", "bgmi aimbot", "bgmi mod"]
+    },
+    "codm": {
+      "name": "Call of Duty Mobile",
+      "official_packages": ["com.activision.callofduty.shooter", "com.garena.game.codm", "com.tencent.tmgp.kr.codm", "com.vng.codmvn"],
+      "name_hints": ["codm", "callofduty", "call of duty"],
+      "context_words": ["codm", "call of duty", "callofduty"],
+      "keywords_high": ["codm hack", "codm esp", "codm aimbot", "codm mod", "cod mobile hack"]
+    }
+  },
+
+  "official_freefire_packages": ["com.dts.freefireth", "com.dts.freefiremax"],
+
+  "known_bad_sha256": {
+    "_example_put_a_real_sha256_here_0000000000000000000000000000000000": "Example hack name (replace this line)"
+  },
+
+  "hack_websites": [
+    "_add website addresses that sell or share FF hacks here, e.g. \"examplehacksite.com\""
+  ],
+
+  "extra_scan_folders": []
+}
