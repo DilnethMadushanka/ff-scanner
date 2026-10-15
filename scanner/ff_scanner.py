@@ -35,7 +35,7 @@ except ImportError:  # not Windows
     winreg = None
 
 APP_NAME = "FF Scanner"
-VERSION = "3.1"
+VERSION = "3.2"
 
 IS_WINDOWS = os.name == "nt"
 HIGH, MEDIUM, INFO = "HIGH", "MEDIUM", "INFO"
@@ -1735,6 +1735,13 @@ def online_session(server, interactive):
 
 
 def main():
+    if "--cli" not in sys.argv and (getattr(sys, "frozen", False) or "--gui" in sys.argv):
+        try:
+            import ff_gui
+        except Exception as e:  # no window support: fall back to the text version
+            print(f"  Window could not open ({e}); using the text version.")
+        else:
+            return ff_gui.run()
     if IS_WINDOWS:
         os.system("")  # enable ANSI colours in the console
     red, orange, green, reset = "\033[91m", "\033[93m", "\033[92m", "\033[0m"

@@ -3,7 +3,7 @@ REM Builds FFScanner.exe (single portable file) on a Windows PC.
 REM Needs Python 3.9+ from python.org (tick "Add Python to PATH" when installing).
 cd /d "%~dp0"
 python -m pip install --upgrade pyinstaller || goto :err
-python -m PyInstaller --onefile --console --uac-admin --name FFScanner ^
+python -m PyInstaller --onefile --windowed --uac-admin --name FFScanner ^
   --add-data "signatures.json;." ff_scanner.py || goto :err
 copy /y signatures.json dist\signatures.json >nul
 echo.

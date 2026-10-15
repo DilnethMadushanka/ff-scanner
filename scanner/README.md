@@ -3,6 +3,11 @@
 A small, portable Windows program you run on a player's PC (with their knowledge) before a match.
 It only **reads**. It does not delete, change, or upload anything.
 
+## The scanner window (v3.2)
+
+FFScanner.exe opens a window instead of a black command box: the session PIN (filled in automatically when downloaded from the website's /dl/<PIN> link), game, what to check, player name and a deep-scan option, then a Start button, a progress bar and a colored result with the top findings, "Sent to the organizer", and Open full report.
+The text version is still there for testing: `python ff_scanner.py --cli`.
+
 ## Website (online sessions)
 
 When `server_url` in `signatures.json` is set (the GitHub Action does this), the scanner asks for the **session PIN** the organizer created on the website. It then uses that session's game, player and check type, and sends the report to the website when it finishes. Press Enter at the PIN prompt to scan offline instead; the .json report can be given to the organizer by hand.
