@@ -25,6 +25,8 @@ import sqlite3
 import struct
 import subprocess
 import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -35,7 +37,7 @@ except ImportError:  # not Windows
     winreg = None
 
 APP_NAME = "FF Scanner"
-VERSION = "3.2"
+VERSION = "3.3"
 
 IS_WINDOWS = os.name == "nt"
 HIGH, MEDIUM, INFO = "HIGH", "MEDIUM", "INFO"
@@ -301,10 +303,16 @@ class Scanner:
         self.seen_files = set()
         self.files_checked = 0
         self.running_emulators = []
+        self.current = ""          # what the scan is doing now
+        self.step_no, self.step_total = 0, 0
+        self.on_change = None      # called when there is something new to send live
+        self.show = lambda msg: print("  - " + msg, flush=True)
 
     def add(self, level, area, what, reason, when=0):
         """when: Unix time the item was last used/seen, if known (goes into the past-use timeline)."""
         self.findings.append({"level": level, "area": area, "what": what, "reason": reason, "when": when or 0})
+        if self.on_change and level != INFO:
+            self.on_change()
 
     def match_path(self, path):
         """Match a full path: the file name first, then any folder name (HIGH only for folders)."""
@@ -324,7 +332,14 @@ class Scanner:
         return None
 
     def status(self, msg):
-        print("  - " + msg, flush=True)
+        self.current = msg
+        self.show(msg)
+        if self.on_change:
+            self.on_change()
+
+    def progress(self, msg):
+        """Update the current step's text (e.g. a percentage) without starting a new step."""
+        self.current = msg
 
     # ---- 1. running processes and window titles
     def scan_processes(self):
@@ -1408,6 +1423,7 @@ class Scanner:
             size = os.path.getsize(img)
             self.status(f"Deep scan of emulator disk {os.path.basename(img)} ({size // (1024 * 1024)} MB)")
             found = {}
+            done, last = 0, 0.0
             try:
                 with open(img, "rb") as f:
                     tail = b""
@@ -1415,6 +1431,12 @@ class Scanner:
                         chunk = f.read(32 * 1024 * 1024)
                         if not chunk:
                             break
+                        done += len(chunk)
+                        now = time.time()
+                        if now - last > 1:
+                            last = now
+                            self.progress(f"Deep scan of emulator disk {os.path.basename(img)}: "
+                                          f"{done * 100 // max(1, size)}% of {size // (1024 * 1024)} MB")
                         block = (tail + chunk).lower()
                         for p, (a, u) in enc:
                             if p not in found and (a in block or u in block):
@@ -1437,24 +1459,32 @@ class Scanner:
                  self.scan_event_logs, self.scan_emulator_history, self.scan_deep_disk]
         if self.mode == "phone":
             steps = [self.scan_adb, self.scan_emulator_history, self.scan_system]
-        for step in steps:
+        self.step_total = len(steps)
+        for i, step in enumerate(steps):
+            self.step_no = i
             try:
                 step()
             except Exception as e:  # never crash the whole scan
                 self.notes.append(f"{step.__name__} failed: {e}")
-        # dedupe
+            self.step_no = i + 1
+            if self.on_change:
+                self.on_change()
+        self.findings = self.clean_findings()
+        self.accounts = sorted(set(self.accounts))
+
+    def clean_findings(self):
+        """Findings without duplicates, most serious first."""
         uniq, seen = [], set()
-        for f in self.findings:
+        for f in list(self.findings):
             k = (f["area"], f["what"].lower())
             if k in seen:
                 continue
             seen.add(k)
             uniq.append(f)
-        self.findings = sorted(uniq, key=lambda f: (LEVEL_ORDER[f["level"]], f["area"], f["what"]))
-        self.accounts = sorted(set(self.accounts))
+        return sorted(uniq, key=lambda f: (LEVEL_ORDER[f["level"]], f["area"], f["what"]))
 
-    def verdict(self):
-        levels = {f["level"] for f in self.findings}
+    def verdict(self, findings=None):
+        levels = {f["level"] for f in (self.findings if findings is None else findings)}
         if HIGH in levels:
             return "SUSPICIOUS", "Hack signs found. Check the items marked HIGH with the player before allowing them to play."
         if MEDIUM in levels:
@@ -1477,6 +1507,79 @@ def section_of(f):
     if f["area"] == "USB device":
         return "devices"
     return "indications"
+
+
+def report_data(sc, started, admin, pin, player, run_id="", live=False):
+    """The report as the website stores it. live=True: a snapshot taken while the scan is still running."""
+    findings = sc.clean_findings() if live else sc.findings
+    verdict, summary = sc.verdict(findings)
+    data = {
+        "schema": "ffscan/1", "version": VERSION, "pin": pin, "player": player, "game": sc.game_name,
+        "pc": env("COMPUTERNAME", "pc"), "user": env("USERNAME", "user"),
+        "time": started.isoformat(timespec="seconds"), "admin": bool(admin),
+        "files_checked": sc.files_checked, "verdict": verdict, "summary": summary,
+        "findings": [dict(f, section=section_of(f)) for f in findings],
+        "system_info": [[k, str(v)] for k, v in list(sc.system_info)],
+        "accounts": [list(a) for a in sorted(set(sc.accounts))], "notes": list(sc.notes),
+        "run": run_id,
+    }
+    if live:
+        data["progress"] = {"step": sc.step_no, "total": sc.step_total, "now": sc.current}
+    return data
+
+
+class LiveUploader:
+    """Sends what the scan has found so far to the website every few seconds, in the background.
+
+    If the player closes the scanner or pulls the cable halfway, the organizer still has everything
+    found up to that point. Network problems never slow down or stop the scan."""
+
+    def __init__(self, server, pin, make_report, every=4):
+        self.server, self.pin, self.make_report, self.every = server, pin, make_report, every
+        self.wake = threading.Event()
+        self.stop_flag = False
+        self.last_error = ""
+        self.thread = threading.Thread(target=self.loop, daemon=True)
+        self.thread.start()
+
+    def changed(self):
+        self.wake.set()
+
+    def send(self, stopped=False):
+        try:
+            report = self.make_report()
+            if stopped:
+                report["stopped"] = True
+            code, data = http_json(f"{self.server}/api/scan", {"pin": self.pin, "live": True, "report": report}, timeout=20)
+            self.last_error = "" if code == 200 else data.get("error", f"error {code}")
+            return code
+        except Exception as e:  # never let live updates break the scan
+            self.last_error = str(e)
+            return 0
+
+    def loop(self):
+        while not self.stop_flag:
+            self.wake.wait(30)  # also send a heartbeat during long steps
+            if self.stop_flag:
+                break
+            self.wake.clear()
+            if self.send() == 409:  # the final report is already in
+                break
+            time.sleep(self.every)
+
+    def abort(self):
+        """The scanner is being closed mid-scan: send what was found, marked as stopped, right away."""
+        self.stop_flag = True
+        self.wake.set()
+        self.send(stopped=True)
+
+    def close(self, stopped=False):
+        """Stop the background loop. stopped=True: tell the site the scan did not finish."""
+        self.stop_flag = True
+        self.wake.set()
+        self.thread.join(timeout=25)
+        if stopped:
+            self.send(stopped=True)
 
 
 def write_reports(sc, started, admin, pin, player):
@@ -1616,14 +1719,7 @@ show('summary');
         fh.write(page)
 
     # ---- json report, for uploading to the web dashboard
-    data = {
-        "schema": "ffscan/1", "version": VERSION, "pin": pin, "player": player, "game": sc.game_name,
-        "pc": pc, "user": user, "time": started.isoformat(timespec="seconds"), "admin": bool(admin),
-        "files_checked": sc.files_checked, "verdict": verdict, "summary": summary,
-        "findings": [dict(f, section=section_of(f)) for f in sc.findings],
-        "system_info": [[k, str(v)] for k, v in sc.system_info],
-        "accounts": [list(a) for a in sc.accounts], "notes": sc.notes,
-    }
+    data = report_data(sc, started, admin, pin, player)
     with open(base + ".json", "w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=1)
     return base + ".html", base + ".txt", verdict, summary
@@ -1734,7 +1830,25 @@ def online_session(server, interactive):
     return None
 
 
+def relaunch_as_admin():
+    """Windows: start this exe again with the 'Run as administrator' prompt. True if the new copy started."""
+    if not IS_WINDOWS or is_admin() or "--no-elevate" in sys.argv:
+        return False
+    if getattr(sys, "frozen", False):
+        exe, args = sys.executable, sys.argv[1:]
+    else:
+        exe, args = sys.executable, [os.path.abspath(sys.argv[0])] + sys.argv[1:]
+    params = subprocess.list2cmdline(args + ["--no-elevate"])
+    try:
+        # 'runas' shows the Windows admin prompt; returns > 32 when the new process started
+        return ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1) > 32
+    except Exception:
+        return False  # the player said No: carry on without admin (some checks are skipped)
+
+
 def main():
+    if relaunch_as_admin():
+        return 0
     if "--cli" not in sys.argv and (getattr(sys, "frozen", False) or "--gui" in sys.argv):
         try:
             import ff_gui
@@ -1792,7 +1906,20 @@ def main():
     sc.deep = deep
     sc.mode = mode
     print(f"  Checking for: {sc.game_name}\n")
-    sc.run_all()
+    run_id = f"{random.SystemRandom().randint(0, 2**32):08x}"
+    live = None
+    if session:
+        live = LiveUploader(server, pin, lambda: report_data(sc, started, admin, pin, player, run_id, live=True))
+        sc.on_change = live.changed
+        print("  The organizer can follow this scan live on the website.\n")
+    try:
+        sc.run_all()
+    except KeyboardInterrupt:
+        if live:
+            live.close(stopped=True)
+        raise
+    if live:
+        live.close()
     html_path, txt_path, verdict, summary = write_reports(sc, started, admin, pin, player)
     col = {"SUSPICIOUS": red, "REVIEW": orange, "CLEAN": green}[verdict]
     print(f"\n  RESULT: {col}{verdict}{reset}   (PIN {pin})\n  {summary}\n")
@@ -1812,6 +1939,7 @@ def main():
             report = None
             print(f"  {red}Could not read the report: {e}{reset}")
         if report is not None:
+            report["run"] = run_id
             code, data = http_json(f"{server}/api/scan", {"pin": pin, "report": report}, timeout=60)
             if code == 200:
                 print(f"  {green}Sent. The organizer can see the result now.{reset}")

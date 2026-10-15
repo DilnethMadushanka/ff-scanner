@@ -30,7 +30,10 @@ async function api(path, opts = {}) {
 function fmtTime(t) { if (!t) return "—"; const d = new Date(t); return isNaN(d) ? String(t) : d.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
 function fmtUnix(t) { return t ? fmtTime(t * 1000) : "—"; }
 function setMsg(text, kind) { const m = $("#msg"); m.textContent = text; m.className = kind || ""; }
-const verdictOf = s => s.status === "done" ? s.verdict : "WAITING";
+const LIVE_GAP = 90 * 1000; // no update for this long while scanning = the scanner was closed
+const isLive = s => s.status === "scanning" && Date.now() - Date.parse(s.lastSeen || 0) < LIVE_GAP;
+const verdictOf = s => s.status === "done" ? s.verdict : s.status === "waiting" ? "WAITING" : isLive(s) ? "LIVE" : "STOPPED";
+const pillText = s => verdictOf(s) === "LIVE" && s.total ? `LIVE ${s.step}/${s.total}` : verdictOf(s);
 
 /* ---------- sign in ---------- */
 function signOut(message) {
@@ -84,8 +87,8 @@ $("#created").addEventListener("click", async e => {
 function renderList() {
   const q = $("#q").value.trim().toLowerCase(), fv = $("#fv").value;
   const rows = sessions.filter(s => (!fv || verdictOf(s) === fv) && (!q || [s.player, s.scannedPlayer, s.pin, s.pc, s.gameName].join(" ").toLowerCase().includes(q)));
-  const t = { WAITING: 0, SUSPICIOUS: 0, REVIEW: 0, CLEAN: 0 }; sessions.forEach(s => t[verdictOf(s)] = (t[verdictOf(s)] || 0) + 1);
-  $("#tally").innerHTML = `<div><b>${t.WAITING}</b>Waiting</div><div class="t-hi"><b>${t.SUSPICIOUS}</b>Suspicious</div><div class="t-me"><b>${t.REVIEW}</b>Review</div><div class="t-ok"><b>${t.CLEAN}</b>Clean</div>`;
+  const t = { WAITING: 0, LIVE: 0, STOPPED: 0, SUSPICIOUS: 0, REVIEW: 0, CLEAN: 0 }; sessions.forEach(s => t[verdictOf(s)] = (t[verdictOf(s)] || 0) + 1);
+  $("#tally").innerHTML = `<div><b>${t.WAITING}</b>Waiting</div><div class="t-ok"><b>${t.LIVE}</b>Scanning now</div><div class="t-hi"><b>${t.STOPPED}</b>Stopped</div><div class="t-hi"><b>${t.SUSPICIOUS}</b>Suspicious</div><div class="t-me"><b>${t.REVIEW}</b>Review</div><div class="t-ok"><b>${t.CLEAN}</b>Clean</div>`;
   if (!sessions.length) { $("#list").innerHTML = `<div class="empty"><b>No sessions yet</b>Create a session PIN above for the first player.</div>`; return; }
   if (!rows.length) { $("#list").innerHTML = `<div class="empty"><b>No matching sessions</b>Try another name or PIN.</div>`; return; }
   $("#list").innerHTML = `<table><thead><tr><th>PIN</th><th>Player</th><th class="hide-sm">Game</th><th class="hide-sm">PC</th><th>Created</th><th>Result</th><th class="num">High / Med</th></tr></thead><tbody>${
@@ -93,8 +96,8 @@ function renderList() {
       <td class="pin">${esc(s.pin)}</td><td>${esc(s.player || s.scannedPlayer || "—")}</td>
       <td class="hide-sm">${esc(s.gameName)} · ${esc(MODE[s.mode] || "")}</td><td class="hide-sm">${esc(s.pc || "—")}</td>
       <td class="num">${esc(fmtTime(s.created))}</td>
-      <td><span class="pill v-${esc(verdictOf(s))}">${esc(verdictOf(s))}</span></td>
-      <td class="num">${s.status === "done" ? `${s.high} / ${s.medium}` : "—"}</td></tr>`).join("")
+      <td><span class="pill v-${esc(verdictOf(s))}">${esc(pillText(s))}</span>${s.status !== "done" && s.status !== "waiting" && s.high ? ` <span class="pill v-SUSPICIOUS">${s.high} HIGH</span>` : ""}${s.earlierHigh ? ` <span class="pill v-STOPPED" title="An earlier scan with this PIN was stopped and had HIGH findings">+${s.earlierHigh} earlier</span>` : ""}</td>
+      <td class="num">${s.status !== "waiting" ? `${s.high ?? 0} / ${s.medium ?? 0}` : "—"}</td></tr>`).join("")
   }</tbody></table>`;
 }
 $("#list").addEventListener("click", e => { const r = e.target.closest(".row"); if (r) openScan(r.dataset.pin); });
@@ -103,18 +106,23 @@ $("#q").addEventListener("input", renderList);
 $("#fv").addEventListener("change", renderList);
 
 /* ---------- report ---------- */
-async function openScan(pin) {
-  openPin = pin; section = "summary"; renderList();
+async function openScan(pin, quiet) {
+  if (!quiet) { openPin = pin; section = "summary"; renderList(); }
   const d = $("#detail"); d.hidden = false;
   const s = sessions.find(x => x.pin === pin);
-  if (s && s.status !== "done") {
-    d.innerHTML = `<div class="list"><div class="empty"><b>Waiting for the scan</b>PIN ${esc(pin)} has not uploaded a result yet. This page checks again every 15 seconds.
+  if (s && s.status === "waiting") {
+    d.innerHTML = `<div class="list"><div class="empty"><b>Waiting for the scan</b>PIN ${esc(pin)} has not uploaded a result yet. This page checks again every few seconds.
       <p><button type="button" class="danger" id="del">Delete session</button></p></div></div>`;
     return;
   }
-  d.innerHTML = `<div class="list"><div class="empty"><b>Opening scan ${esc(pin)}…</b></div></div>`;
-  try { openReport = (await api(`/api/report?pin=${pin}`)).report; renderReport(); d.scrollIntoView({ behavior: "smooth", block: "start" }); }
-  catch (e) { d.innerHTML = `<div class="list"><div class="empty"><b>Could not open the report</b>${esc(e.message)}</div></div>`; }
+  if (!quiet) d.innerHTML = `<div class="list"><div class="empty"><b>Opening scan ${esc(pin)}…</b></div></div>`;
+  try {
+    const r = (await api(`/api/report?pin=${pin}`)).report;
+    if (openPin !== pin) return;
+    openReport = r; renderReport();
+    if (!quiet) d.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  catch (e) { if (quiet) return; d.innerHTML = `<div class="list"><div class="empty"><b>Could not open the report</b>${esc(e.message)}</div></div>`; }
 }
 
 function counts(r) {
@@ -136,13 +144,26 @@ function renderReport() {
   const r = openReport, c = counts(r), f = r.findings || [];
   const rail = SECTIONS.map(([k, label, grp]) => (grp ? `<div class="grp">${grp}</div>` : "") +
     `<a href="#" data-sec="${k}" class="${k === section ? "on" : ""}">${label}${k === "summary" ? "" : `<span class="${k === "cheats" && c.cheats ? "red" : ""}">${c[k]}</span>`}</a>`).join("");
+  const s = sessions.find(x => x.pin === r.pin) || {};
+  let banner = "";
+  if (r.live) {
+    const p = r.progress || {}, pct = p.total ? Math.round(p.step * 100 / p.total) : 0;
+    banner = verdictOf(s) === "LIVE"
+      ? `<div class="livebar"><span class="pill v-LIVE">LIVE</span> <b>Scan running, step ${esc(p.step)} of ${esc(p.total)}.</b> ${esc(p.now)}<br><small>This page updates every few seconds. The result can still change.</small><div class="track"><i style="width:${pct}%"></i></div></div>`
+      : `<div class="livebar stopped"><b>The scan stopped before it finished</b> (step ${esc(p.step)} of ${esc(p.total)}${r.stopped ? ", the scanner was closed" : ", the scanner lost contact"}). Below is everything it found until then. Last update ${esc(fmtTime(s.lastSeen))}.</div>`;
+  }
+  const earlier = r.earlier || [];
+  if (earlier.length) {
+    banner += `<div class="livebar stopped"><b>${earlier.length} earlier scan${earlier.length > 1 ? "s" : ""} with this PIN did not finish.</b> ${earlier.map(e => `Run at ${esc(fmtTime(e.time))}: ${(e.findings || []).filter(f => f.level === "HIGH").length} HIGH, ${(e.findings || []).filter(f => f.level === "MEDIUM").length} MEDIUM, stopped at step ${esc((e.progress || {}).step ?? "?")} of ${esc((e.progress || {}).total ?? "?")}.`).join(" ")} Their findings are listed at the end of the Summary.</div>`;
+  }
   let body = "";
   if (section === "summary") {
     const tl = f.filter(x => x.when && x.level !== "INFO").sort((a, b) => b.when - a.when);
-    body = `<div class="verdict v-${esc(r.verdict)}">${esc(r.verdict)}<small>${esc(r.summary)}</small></div>
+    body = `<div class="verdict v-${esc(r.verdict)}">${esc(r.verdict)}${r.live ? " so far" : ""}<small>${esc(r.summary)}</small></div>
       <div class="stats">${["cheats", "indications", "files", "defender", "devices"].map(k => `<button type="button" data-sec="${k}"><b>${c[k]}</b>${SECTIONS.find(s => s[0] === k)[1]}</button>`).join("")}</div>
       <h2>Past use timeline</h2><p class="sub">When each flagged item was last run, opened, downloaded or deleted, newest first.</p>
       ${tl.length ? `<div class="tbl"><table><thead><tr><th>When</th><th>Level</th><th>Where</th><th>Item</th></tr></thead><tbody>${tl.map(x => `<tr><td class="num">${esc(fmtUnix(x.when))}</td><td><span class="pill l-${esc(x.level)}">${esc(x.level)}</span></td><td>${esc(x.area)}</td><td class="path">${esc(x.what)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="list"><div class="empty">No dated hack activity in this scan.</div></div>`}
+      ${earlier.map((e, i) => `<h2>Earlier unfinished scan ${i + 1}</h2><p class="sub">Started ${esc(fmtTime(e.time))}. The player stopped or restarted this scan.</p>${findingsTable((e.findings || []).filter(x => x.level !== "INFO"), "Nothing found before it stopped.")}`).join("")}
       <h2>Scanner notes</h2><ul class="notes">${(r.notes || []).map(n => `<li>${esc(n)}</li>`).join("") || "<li>None</li>"}</ul>`;
   } else if (section === "system") {
     const rows = [["Scanner version", r.version], ["Run as admin", r.admin ? "yes" : "NO (some checks skipped)"], ["Files checked", r.files_checked], ...(r.system_info || [])];
@@ -164,7 +185,7 @@ function renderReport() {
       <div><div class="lbl">PC</div><b>${esc(r.pc)}</b> (${esc(r.user)})</div>
       <div><div class="lbl">Scanned</div><b>${esc(fmtTime(r.time))}</b></div>
       <div class="acts" id="acts"><button type="button" id="close">Close</button><button type="button" class="danger" id="del">Delete</button></div>
-    </div>${body}</div></div>`;
+    </div>${banner}${body}</div></div>`;
 }
 
 $("#detail").addEventListener("click", async e => {
@@ -187,11 +208,18 @@ function start() {
   $("#login-view").hidden = true; $("#app").hidden = false;
   load();
   clearInterval(timer);
+  let tick = 0;
   timer = setInterval(async () => {
     if (document.hidden || !key) return;
-    const waiting = openPin && sessions.find(s => s.pin === openPin && s.status !== "done");
+    tick++;
+    const before = openPin && sessions.find(s => s.pin === openPin);
+    const watching = before && (before.status === "scanning" || before.status === "waiting");
+    if (!watching && !sessions.some(isLive) && tick % 3) return; // every 15 s when nothing is running
     await load();
-    if (waiting && sessions.find(s => s.pin === openPin && s.status === "done")) openScan(openPin);
-  }, 15000);
+    const now = openPin && sessions.find(s => s.pin === openPin);
+    if (now && now.status !== "waiting" && (watching || before?.status !== now.status)) {
+      if (before.status === "waiting") openScan(openPin); else openScan(openPin, true);
+    }
+  }, 5000);
 }
 if (key) start(); else signOut();

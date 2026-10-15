@@ -8,11 +8,11 @@ Anti-cheat screening for Free Fire, PUBG Mobile and COD Mobile tournaments, on P
 ## How it works at the tournament
 
 1. Organizer signs in to the website and creates a session PIN (player name, game, PC or phone).
-2. Player downloads `FFScanner.exe` from the website, runs it as administrator and types the PIN.
-3. The scanner checks the PC (or phone over USB) and sends the report to the website.
+2. Player downloads `FFScanner.exe` from the `/dl/<PIN>` link and opens it. It asks for administrator by itself and fills in the PIN.
+3. The scanner checks the PC (or phone over USB) and sends findings to the website live while it runs. If the scan is closed halfway, the session shows STOPPED with what was found until then.
 4. Organizer opens the report: Summary, Cheats Found, Key Indications, Suspicious Files, Defender History, Devices Removed, System Information, Alt Accounts.
 
-Each PIN works for one upload within 24 hours. Sessions and reports are kept for 30 days.
+Each PIN takes one final result within 24 hours. Unfinished earlier scans with the same PIN are kept in the report. Sessions and reports are kept for 30 days.
 
 ## Deploy on Vercel (one time)
 

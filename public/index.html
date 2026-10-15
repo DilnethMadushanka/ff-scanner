@@ -119,6 +119,15 @@ ul.notes { margin: 0; padding-left: 20px; color: var(--mut) }
 .created .big { font: 600 40px var(--mono); color: var(--accent); letter-spacing: .06em }
 .created ol { margin: 0; padding-left: 20px; flex: 1 1 300px; min-width: 0 }
 .v-WAITING { background: var(--in-soft); color: var(--in) }
+.v-LIVE { background: var(--ok-soft); color: var(--ok) }
+.v-LIVE::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; animation: blink 1.2s infinite }
+.v-STOPPED { background: var(--hi-soft); color: var(--hi) }
+@keyframes blink { 50% { opacity: .25 } }
+@media (prefers-reduced-motion: reduce) { .v-LIVE::before { animation: none } }
+.livebar { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; margin-bottom: 14px; background: var(--panel) }
+.livebar.stopped { border-color: var(--hi); background: var(--hi-soft); color: var(--hi) }
+.livebar .track { height: 6px; border-radius: 3px; background: var(--in-soft); margin-top: 8px; overflow: hidden }
+.livebar .track i { display: block; height: 100%; background: var(--ok) }
 .topbar { display: flex; gap: 8px; align-items: center }
 </style>
 </head>
@@ -156,7 +165,7 @@ ul.notes { margin: 0; padding-left: 20px; color: var(--mut) }
   <div class="tools">
     <input id="q" type="search" placeholder="Search player, PIN or PC" aria-label="Search scans">
     <select id="fv" aria-label="Filter by result">
-      <option value="">All results</option><option>WAITING</option><option>SUSPICIOUS</option><option>REVIEW</option><option>CLEAN</option>
+      <option value="">All results</option><option>WAITING</option><option>LIVE</option><option>STOPPED</option><option>SUSPICIOUS</option><option>REVIEW</option><option>CLEAN</option>
     </select>
   </div>
 

@@ -30,6 +30,8 @@ class App:
         self.q = queue.Queue()
         self.session = None
         self.html_path = None
+        self.scanner = None
+        self.live = None
         try:
             self.cfg = core.load_config()
         except Exception as e:
@@ -61,7 +63,17 @@ class App:
             self.message(f"Could not read signatures.json: {self.load_error}")
             return
         self.setup_screen()
+        root.protocol("WM_DELETE_WINDOW", self.on_close)
         root.after(100, self.poll)
+
+    def on_close(self):
+        live = self.live
+        if live:  # closed in the middle of a scan: the organizer still gets what was found so far
+            self.live = None
+            self.root.title("Stopping...")
+            self.root.update()
+            live.abort()
+        self.root.destroy()
 
     # ------------------------------------------------------------------ look
     def style(self):
@@ -242,7 +254,10 @@ class App:
         self.log.pack(fill="both", expand=True)
         self.log.tag_configure("done", foreground=MUT)
         self.log.tag_configure("now", foreground=FG)
-        self.label(self.body, "Keep this window open. A full scan can take a few minutes.", 9, MUT).pack(fill="x", pady=(8, 0))
+        tip = "Keep this window open. A full scan can take a few minutes."
+        if self.session:
+            tip += " The organizer sees the findings live while it runs."
+        self.label(self.body, tip, 9, MUT, wraplength=580).pack(fill="x", pady=(8, 0))
         self.steps_seen = 0
         threading.Thread(target=self.worker, args=(game_keys, mode, player, deep, pin), daemon=True).start()
 
@@ -251,10 +266,19 @@ class App:
             started = dt.datetime.now()
             sc = core.Scanner(self.cfg, game_keys)
             sc.mode, sc.deep = mode, deep
-            sc.status = lambda msg: self.q.put(("step", msg))
+            sc.show = lambda msg: self.q.put(("step", msg))
+            self.scanner = sc
             total = 3 if mode == "phone" else 21
             self.q.put(("total", total))
+            run_id = f"{core.random.SystemRandom().randint(0, 2**32):08x}"
+            if self.session:
+                self.live = core.LiveUploader(self.server, pin, lambda: core.report_data(
+                    sc, started, self.admin, pin, player, run_id, live=True))
+                sc.on_change = self.live.changed
             sc.run_all()
+            if self.live:
+                self.live.close()
+                self.live = None
             self.q.put(("step", "Writing the report"))
             html_path, txt_path, verdict, summary = core.write_reports(sc, started, self.admin, pin, player)
             sent = None
@@ -262,6 +286,7 @@ class App:
                 self.q.put(("step", "Sending the result to the organizer"))
                 with open(html_path[:-5] + ".json", encoding="utf-8") as fh:
                     report = json.load(fh)
+                report["run"] = run_id
                 code, data = core.http_json(f"{self.server}/api/scan", {"pin": pin, "report": report}, timeout=60)
                 sent = (code == 200, data.get("error", f"error {code}") if code != 200 else "")
             self.q.put(("done", sc, verdict, summary, html_path, pin, sent))
@@ -291,6 +316,13 @@ class App:
                     self.message(f"The scan stopped with an error: {item[1]}")
         except queue.Empty:
             pass
+        sc = self.scanner
+        if sc and self.live and getattr(self, "step_lbl", None) and self.step_lbl.winfo_exists():
+            if sc.current and self.step_lbl.cget("text") != sc.current:
+                self.step_lbl.configure(text=sc.current)  # e.g. the deep scan's percentage
+            err = self.live.last_error
+            self.count_lbl.configure(text=f"Live update problem: {err}" if err else "Live: the organizer can see this scan.",
+                                     fg=HI if err else MUT)
         self.root.after(120, self.poll)
 
     # ------------------------------------------------------------------ screen 3: result

@@ -8,6 +8,13 @@ It only **reads**. It does not delete, change, or upload anything.
 FFScanner.exe opens a window instead of a black command box: the session PIN (filled in automatically when downloaded from the website's /dl/<PIN> link), game, what to check, player name and a deep-scan option, then a Start button, a progress bar and a colored result with the top findings, "Sent to the organizer", and Open full report.
 The text version is still there for testing: `python ff_scanner.py --cli`.
 
+## Live updates and admin prompt (v3.3)
+
+- With a session PIN, the scanner sends what it has found so far to the website every few seconds. The organizer sees a LIVE badge with the current step. If the player closes the scanner or the PC loses contact, the session shows STOPPED with everything found up to that point.
+- If the same PIN is scanned again after a stopped scan, the earlier unfinished scan is kept and shown in the report, so stopping and restarting can't hide anything.
+- The exe asks for administrator by itself. If Windows doesn't show the prompt, it restarts itself with "Run as administrator". If the player says No, it scans without admin and the report says so.
+- The deep emulator-disk step shows a percentage, because a 30 GB disk can take several minutes.
+
 ## Website (online sessions)
 
 When `server_url` in `signatures.json` is set (the GitHub Action does this), the scanner asks for the **session PIN** the organizer created on the website. It then uses that session's game, player and check type, and sends the report to the website when it finishes. Press Enter at the PIN prompt to scan offline instead; the .json report can be given to the organizer by hand.
@@ -123,6 +130,8 @@ deciding. For stronger protection, combine it with rules like: fresh emulator in
 during matches, and watching screens/replays.
 
 ## Sinhala summary (සාරාංශය)
+
+v3.3: scan eka yaddi tika tika website ekata live yanava. Player scan eka cancel kalath, e welawa wenakan hoyagaththa dewal organizer ta penawa (STOPPED). Exe eka admin permission eka thaniyama illanava.
 
 * Me software eka player ge PC eke **run karala** hack files, panels, injectors, mod APK, Cheat Engine wage dewal thiyenawada kiyala balanawa. Mukuth delete karanne naha, kisi thanakata yawanne naha.
 * **Rathu (SUSPICIOUS)** awoth hack sign thiyenawa. Thambili (REVIEW) nam athin balanna. Kola (CLEAN) nam danna hack ekak hambune naha.
