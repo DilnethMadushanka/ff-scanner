@@ -110,7 +110,7 @@ ul.notes { margin: 0; padding-left: 20px; color: var(--mut) }
 @media (prefers-reduced-motion: no-preference) { .row, .rail a, button { transition: background .12s } }
 </style>
 <style>
-.login { max-width: 380px; margin: 12vh auto 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: grid; gap: 12px }
+.login { max-width: 380px; width: 100%; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: grid; gap: 12px }
 .login input, .newform input, .newform select { font: 15px var(--sans); padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--fg); width: 100% }
 .newform { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px }
 .newform .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end }
@@ -129,15 +129,42 @@ ul.notes { margin: 0; padding-left: 20px; color: var(--mut) }
 .livebar .track { height: 6px; border-radius: 3px; background: var(--in-soft); margin-top: 8px; overflow: hidden }
 .livebar .track i { display: block; height: 100%; background: var(--ok) }
 .topbar { display: flex; gap: 8px; align-items: center }
+.intro { text-align: center; display: grid; justify-items: center; gap: 4px; margin-top: 6vh }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; max-width: 520px; width: 100%; margin: 0 auto }
+.plan { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px }
+.plan .lbl, .planbar .lbl { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--mut) }
+.plan .price { font-size: 28px; font-weight: 700 } .plan .price small { font-size: 14px; font-weight: 400; color: var(--mut) }
+.plan p { margin: 2px 0 0; color: var(--mut) } .plan p b { color: var(--fg) }
+.login { margin-top: 0 } .login h2 { margin: 0 }
+a { color: var(--accent) }
+.planbar { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center }
+.planbar.off { border-color: var(--me); background: var(--me-soft) }
+.planbar .big { font-size: 18px; font-weight: 700 }
+.planbar .meter { flex: 1 1 200px; min-width: 0 }
+.planbar .track { height: 8px; border-radius: 4px; background: var(--in-soft); overflow: hidden; margin-top: 6px }
+.planbar .track i { display: block; height: 100%; background: var(--accent) }
+.planbar .track i.full { background: var(--hi) }
+.planbar .acts { display: flex; gap: 8px; flex-wrap: wrap }
+a.btn { text-decoration: none; display: inline-block }
+a.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg) }
 </style>
 </head>
 <body>
 <div class="wrap" id="login-view" hidden>
-  <form class="login" id="login-form">
+  <div class="intro">
     <h1>FF <span>Scan Desk</span></h1>
-    <p class="lede">Organizer sign-in. Players don't need this page; they only run the scanner with the PIN you give them.</p>
-    <input id="pw" type="password" placeholder="Organizer password" autocomplete="current-password" aria-label="Organizer password" required>
-    <button class="primary" type="submit">Sign in</button>
+    <p class="lede">Anti-cheat screening for Free Fire, PUBG Mobile and COD Mobile tournaments. Create a PIN for each player, they run the scanner with it, and the result shows up here live. Players don't need an account.</p>
+  </div>
+  <div class="plans" id="plans">
+    <div class="plan"><div class="lbl">Starter</div><div class="price">$9.99<small> / month</small></div><p><b>30 devices</b> scanned each month</p></div>
+    <div class="plan"><div class="lbl">Pro</div><div class="price">$20<small> / month</small></div><p><b>100 devices</b> scanned each month</p></div>
+  </div>
+  <form class="login" id="login-form">
+    <h2 id="login-title">Sign in</h2>
+    <input id="email" type="email" placeholder="Email" autocomplete="email" aria-label="Email" required>
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password" aria-label="Password" minlength="8" required>
+    <button class="primary" type="submit" id="login-go">Sign in</button>
+    <p class="foot"><a href="#" id="login-switch">New organizer? Create an account</a></p>
     <p id="login-msg" class="err" role="status"></p>
   </form>
 </div>
@@ -150,6 +177,8 @@ ul.notes { margin: 0; padding-left: 20px; color: var(--mut) }
     </div>
     <div class="topbar"><div class="tally" id="tally" aria-live="polite"></div><button type="button" id="logout">Sign out</button></div>
   </header>
+
+  <section class="planbar" id="planbar" aria-live="polite"></section>
 
   <form class="newform" id="new-form">
     <div class="fields">

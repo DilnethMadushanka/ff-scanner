@@ -17,8 +17,8 @@ The text version is still there for testing: `python ff_scanner.py --cli`.
 
 ## Website (online sessions)
 
-When `server_url` in `signatures.json` is set (the GitHub Action does this), the scanner asks for the **session PIN** the organizer created on the website. It then uses that session's game, player and check type, and sends the report to the website when it finishes. Press Enter at the PIN prompt to scan offline instead; the .json report can be given to the organizer by hand.
-Options: `--pin 12345678`, `--server https://your-site`, `--offline`.
+When `server_url` in `signatures.json` is set (the GitHub Action does this), the scanner asks for the **session PIN** the organizer created on the website. It then uses that session's game, player and check type, and sends the report to the website when it finishes. The built exe needs a PIN from an organizer with an active plan; before scanning it tells the website, which counts one device on that plan and refuses when the plan has expired or run out. Only when running from the Python source can you press Enter (or pass `--offline`) to scan without a PIN.
+Options: `--pin 12345678`, `--server https://your-site`, `--offline` (source only).
 
 ## Checking Android phones (mobile players)
 
