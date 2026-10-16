@@ -221,13 +221,58 @@ function renderReport() {
       <div><div class="lbl">Game</div><b>${esc(r.game)}</b></div>
       <div><div class="lbl">PC</div><b>${esc(r.pc)}</b> (${esc(r.user)})</div>
       <div><div class="lbl">Scanned</div><b>${esc(fmtTime(r.time))}</b></div>
-      <div class="acts" id="acts"><button type="button" id="close">Close</button><button type="button" class="danger" id="del">Delete</button></div>
+      <div class="acts" id="acts"><button type="button" id="pdf">Download PDF</button><button type="button" id="close">Close</button><button type="button" class="danger" id="del">Delete</button></div>
     </div>${banner}${body}</div></div>`;
+}
+
+/* ---------- PDF: the whole report on paper, saved with the browser's "Save as PDF" ---------- */
+function printReport(r) {
+  const f = r.findings || [], c = counts(r);
+  const tbl = (items, empty) => items.length
+    ? `<table><thead><tr><th>Level</th><th>Where</th><th>Item</th><th>Why</th></tr></thead><tbody>${items.map(x => `<tr><td><b class="lv l-${esc(x.level)}">${esc(x.level)}</b></td><td>${esc(x.area)}</td><td class="path">${esc(x.what)}</td><td>${esc(x.reason)}</td></tr>`).join("")}</tbody></table>`
+    : `<p class="none">${esc(empty)}</p>`;
+  const sec = (k, items, empty) => `<h2>${SECTIONS.find(s => s[0] === k)[1]} (${items.length})</h2>${BLURB[k] ? `<p class="sub">${BLURB[k]}</p>` : ""}${tbl(items, empty)}`;
+  const tl = f.filter(x => x.when && x.level !== "INFO").sort((a, b) => b.when - a.when);
+  const sys = [["Scanner version", r.version], ["Run as admin", r.admin ? "yes" : "NO (some checks skipped)"], ["Files checked", r.files_checked], ...(r.system_info || [])];
+  const acc = r.accounts || [];
+  const state = r.live ? (r.stopped || verdictOf(sessions.find(x => x.pin === r.pin) || {}) !== "LIVE"
+    ? "<p class=\"warn\">This scan stopped before it finished. The report shows what was found until then.</p>"
+    : "<p class=\"warn\">This scan was still running when the PDF was made. The result can still change.</p>") : "";
+  const earlier = (r.earlier || []).map((e, i) => `<h2>Earlier unfinished scan ${i + 1}</h2><p class="sub">Started ${esc(fmtTime(e.time))}. The player stopped or restarted this scan.</p>${tbl((e.findings || []).filter(x => x.level !== "INFO"), "Nothing found before it stopped.")}`).join("");
+  let el = $("#print");
+  if (!el) { el = document.createElement("div"); el.id = "print"; document.body.appendChild(el); }
+  el.innerHTML = `<h1>FF Scanner report</h1>
+    <table class="kv"><tbody>
+      <tr><th>Session PIN</th><td><b>${esc(r.pin)}</b></td><th>Player</th><td>${esc(r.player || "—")}</td></tr>
+      <tr><th>Game</th><td>${esc(r.game)}</td><th>PC</th><td>${esc(r.pc)} (${esc(r.user)})</td></tr>
+      <tr><th>Scanned</th><td>${esc(fmtTime(r.time))}</td><th>Files checked</th><td>${esc(r.files_checked)}</td></tr>
+    </tbody></table>
+    <div class="verdict v-${esc(r.verdict)}">${esc(r.verdict)}${r.live ? " so far" : ""}<small>${esc(r.summary)}</small></div>${state}
+    <p class="sub">Cheats found ${c.cheats} · Key indications ${c.indications} · Suspicious files ${c.files} · Defender history ${c.defender} · Devices removed ${c.devices}</p>
+    ${sec("cheats", f.filter(x => x.level === "HIGH"), "No cheats found.")}
+    <h2>Past use timeline (${tl.length})</h2><p class="sub">When each flagged item was last run, opened, downloaded or deleted, newest first.</p>
+    ${tl.length ? `<table><thead><tr><th>When</th><th>Level</th><th>Where</th><th>Item</th></tr></thead><tbody>${tl.map(x => `<tr><td class="nw">${esc(fmtUnix(x.when))}</td><td><b class="lv l-${esc(x.level)}">${esc(x.level)}</b></td><td>${esc(x.area)}</td><td class="path">${esc(x.what)}</td></tr>`).join("")}</tbody></table>` : `<p class="none">No dated hack activity in this scan.</p>`}
+    ${sec("indications", f.filter(x => x.section === "indications"), "Nothing found.")}
+    ${sec("files", f.filter(x => x.section === "files"), "Nothing found.")}
+    ${sec("defender", f.filter(x => x.section === "defender"), "Nothing found.")}
+    ${sec("devices", f.filter(x => x.section === "devices"), "Nothing found.")}
+    ${earlier}
+    <h2>System Information</h2><table class="kv"><tbody>${sys.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</tbody></table>
+    <h2>Alt Accounts (${acc.length})</h2><p class="sub">${BLURB.accounts}</p>
+    ${acc.length ? `<table><thead><tr><th>Where</th><th>Account</th><th>Detail</th></tr></thead><tbody>${acc.map(([w, n, d]) => `<tr><td>${esc(w)}</td><td class="path">${esc(n)}</td><td>${esc(d)}</td></tr>`).join("")}</tbody></table>` : `<p class="none">No accounts found.</p>`}
+    <h2>Scanner notes</h2><ul>${(r.notes || []).map(n => `<li>${esc(n)}</li>`).join("") || "<li>None</li>"}</ul>
+    <p class="foot">Made ${esc(fmtTime(new Date()))}. Signature checks can be bypassed (renamed or private hacks, cleaned traces), so use this report as a screening aid, not as proof.</p>`;
+  const title = document.title;
+  document.title = `FFScan-${r.pin}${r.player ? "-" + String(r.player).replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 30) : ""}`; // the PDF's file name
+  const done = () => { document.title = title; el.innerHTML = ""; window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  window.print();
 }
 
 $("#detail").addEventListener("click", async e => {
   const s = e.target.closest("[data-sec]");
   if (s) { e.preventDefault(); section = s.dataset.sec; renderReport(); return; }
+  if (e.target.id === "pdf") { printReport(openReport); return; }
   if (e.target.id === "close") { openPin = null; openReport = null; $("#detail").hidden = true; renderList(); return; }
   if (e.target.id === "del") {
     e.target.outerHTML = `<span class="confirm">Delete ${esc(openPin)} for good? <button type="button" class="danger" id="del-yes">Delete</button><button type="button" id="del-no">Keep</button></span>`;

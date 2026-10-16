@@ -38,7 +38,7 @@ except ImportError:  # not Windows
     winreg = None
 
 APP_NAME = "FF Scanner"
-VERSION = "3.5"
+VERSION = "3.6"
 
 IS_WINDOWS = os.name == "nt"
 HIGH, MEDIUM, INFO = "HIGH", "MEDIUM", "INFO"
@@ -1733,6 +1733,13 @@ td,th{{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vert
 .empty{{background:var(--card);border:1px dashed var(--line);border-radius:8px;padding:22px;color:var(--mut);text-align:center}}
 .foot{{color:var(--mut);font-size:12px;margin-top:30px}}
 @media(max-width:760px){{body{{display:block}}aside{{width:auto;height:auto;position:static}}main{{padding:16px}}}}
+.pdf{{margin-left:auto;background:var(--acc);color:#06120b;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer}}
+@media print{{@page{{size:A4;margin:14mm}}
+:root{{--bg:#fff;--card:#fff;--tx:#111;--mut:#555;--line:#ccc;--acc:#1f7a43;--hi:#b71c1c}}
+body{{display:block;background:#fff;color:#111;font-size:10.5pt}}aside,.pdf{{display:none}}main{{padding:0;max-width:none}}
+section{{display:block!important;break-inside:auto}}section+section{{margin-top:18px}}tr{{break-inside:avoid}}h2,h3{{break-after:avoid}}
+td,th{{border:1px solid #ccc}}.verdict{{background:none!important;border:2px solid currentColor}}.verdict.hi{{color:#b71c1c}}.verdict.me{{color:#a35400}}.verdict.ok{{color:#1f7a43}}
+.b{{background:none!important;border:1px solid currentColor}}.b.hi{{color:#b71c1c}}.b.me{{color:#a35400}}.stat b{{color:#111}}}}
 </style></head><body>
 <aside><div class="logo">FF<span> Scanner</span></div>
 <div class="grp">Forensic report</div>{nav('summary')}
@@ -1744,7 +1751,8 @@ td,th{{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vert
 <div><div class="lbl">Game</div><b>{e(sc.game_name)}</b></div>
 <div><div class="lbl">PC</div><b>{e(pc)}</b> ({e(user)})</div>
 <div><div class="lbl">Scanned</div><b>{started:%Y-%m-%d %H:%M}</b></div>
-<div><div class="lbl">Files checked</div><b>{sc.files_checked}</b></div></div>
+<div><div class="lbl">Files checked</div><b>{sc.files_checked}</b></div>
+<button class="pdf" onclick="print()" title="Choose 'Save as PDF' as the printer">Save as PDF</button></div>
 {body}
 <p class="foot">{APP_NAME} v{VERSION}. Read-only scan. Signature checks can be bypassed (renamed or private hacks, cleaned traces), so use this report as a screening aid, not as proof.</p>
 </main><script>
