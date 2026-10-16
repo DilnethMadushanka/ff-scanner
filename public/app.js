@@ -15,7 +15,7 @@ const BLURB = {
   accounts: "Windows accounts on the PC and Google accounts in the emulator or phone. More than one can mean a second account.",
 };
 const MODE = { pc: "PC + emulator", phone: "Android phone", both: "PC + phone" };
-let key = "", signup = false, sessions = [], openPin = null, openReport = null, section = "summary", timer = null;
+let key = "", signup = false, owner = false, sessions = [], openPin = null, openReport = null, section = "summary", timer = null;
 
 try { key = localStorage.getItem("ffscan-auth") || ""; } catch (e) {}
 
@@ -93,7 +93,7 @@ async function loadPlan() {
 
 /* ---------- sessions ---------- */
 async function load() {
-  try { sessions = (await api("/api/sessions")).sessions; renderList(); }
+  try { const d = await api("/api/sessions"); sessions = d.sessions; owner = !!d.owner; renderList(); }
   catch (e) { if (key) $("#list").innerHTML = `<div class="empty"><b>Could not load sessions</b>${esc(e.message)}</div>`; }
 }
 
@@ -123,15 +123,15 @@ $("#created").addEventListener("click", async e => {
 
 function renderList() {
   const q = $("#q").value.trim().toLowerCase(), fv = $("#fv").value;
-  const rows = sessions.filter(s => (!fv || verdictOf(s) === fv) && (!q || [s.player, s.scannedPlayer, s.pin, s.pc, s.gameName].join(" ").toLowerCase().includes(q)));
+  const rows = sessions.filter(s => (!fv || verdictOf(s) === fv) && (!q || [s.player, s.scannedPlayer, s.pin, s.pc, s.gameName, s.org].join(" ").toLowerCase().includes(q)));
   const t = { WAITING: 0, LIVE: 0, STOPPED: 0, SUSPICIOUS: 0, REVIEW: 0, CLEAN: 0 }; sessions.forEach(s => t[verdictOf(s)] = (t[verdictOf(s)] || 0) + 1);
   $("#tally").innerHTML = `<div><b>${t.WAITING}</b>Waiting</div><div class="t-ok"><b>${t.LIVE}</b>Scanning now</div><div class="t-hi"><b>${t.STOPPED}</b>Stopped</div><div class="t-hi"><b>${t.SUSPICIOUS}</b>Suspicious</div><div class="t-me"><b>${t.REVIEW}</b>Review</div><div class="t-ok"><b>${t.CLEAN}</b>Clean</div>`;
   if (!sessions.length) { $("#list").innerHTML = `<div class="empty"><b>No sessions yet</b>Create a session PIN above for the first player.</div>`; return; }
   if (!rows.length) { $("#list").innerHTML = `<div class="empty"><b>No matching sessions</b>Try another name or PIN.</div>`; return; }
-  $("#list").innerHTML = `<table><thead><tr><th>PIN</th><th>Player</th><th class="hide-sm">Game</th><th class="hide-sm">PC</th><th>Created</th><th>Result</th><th class="num">High / Med</th></tr></thead><tbody>${
+  $("#list").innerHTML = `<table><thead><tr><th>PIN</th><th>Player</th>${owner ? `<th class="hide-sm">Organizer</th>` : ""}<th class="hide-sm">Game</th><th class="hide-sm">PC</th><th>Created</th><th>Result</th><th class="num">High / Med</th></tr></thead><tbody>${
     rows.map(s => `<tr class="row${s.pin === openPin ? " sel" : ""}" tabindex="0" data-pin="${esc(s.pin)}">
       <td class="pin">${esc(s.pin)}</td><td>${esc(s.player || s.scannedPlayer || "—")}</td>
-      <td class="hide-sm">${esc(s.gameName)} · ${esc(MODE[s.mode] || "")}</td><td class="hide-sm">${esc(s.pc || "—")}</td>
+      ${owner ? `<td class="hide-sm">${esc(s.org || "You")}</td>` : ""}<td class="hide-sm">${esc(s.gameName)} · ${esc(MODE[s.mode] || "")}</td><td class="hide-sm">${esc(s.pc || "—")}</td>
       <td class="num">${esc(fmtTime(s.created))}</td>
       <td><span class="pill v-${esc(verdictOf(s))}">${esc(pillText(s))}</span>${s.status !== "done" && s.status !== "waiting" && s.high ? ` <span class="pill v-SUSPICIOUS">${s.high} HIGH</span>` : ""}${s.earlierHigh ? ` <span class="pill v-STOPPED" title="An earlier scan with this PIN was stopped and had HIGH findings">+${s.earlierHigh} earlier</span>` : ""}</td>
       <td class="num">${s.status !== "waiting" ? `${s.high ?? 0} / ${s.medium ?? 0}` : "—"}</td></tr>`).join("")
