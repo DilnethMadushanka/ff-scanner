@@ -38,7 +38,7 @@ except ImportError:  # not Windows
     winreg = None
 
 APP_NAME = "FF Scanner"
-VERSION = "3.4"
+VERSION = "3.5"
 
 IS_WINDOWS = os.name == "nt"
 HIGH, MEDIUM, INFO = "HIGH", "MEDIUM", "INFO"
@@ -1836,8 +1836,37 @@ def http_json(url, payload=None, timeout=30):
         return 0, {"error": f"Could not reach the website ({e})"}
 
 
+def device_id():
+    """A hash of this PC's Windows install ID, so the organizer's report can tell the same PC scanned twice."""
+    raw = ""
+    if IS_WINDOWS:
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography",
+                                0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as k:
+                raw = winreg.QueryValueEx(k, "MachineGuid")[0]
+        except Exception:
+            pass
+    raw = raw or env("COMPUTERNAME", "pc")
+    return hashlib.sha256(("ffscan:" + raw).encode("utf-8")).hexdigest()[:32]
+
+
+def start_scan(server, pin):
+    """Tell the website the scan is starting. It counts one device on the organizer's monthly plan
+    and refuses when the plan has run out. Returns (ok, message)."""
+    code, data = http_json(f"{server}/api/scan", {"pin": pin, "start": True, "device": device_id()}, timeout=30)
+    if code == 200:
+        return True, ""
+    return False, data.get("error") or f"Could not start the scan (error {code})."
+
+
+def offline_allowed():
+    """Scanning without a PIN is only for development from the source code. The exe always needs a
+    PIN from an organizer with an active plan."""
+    return not getattr(sys, "frozen", False)
+
+
 def online_session(server, interactive):
-    """Ask for the organizer's session PIN and fetch its settings. Returns the session dict or None (offline)."""
+    """Ask for the organizer's session PIN and fetch its settings. Returns the session dict or None."""
     pin = arg_value("--pin")
     if pin is None and getattr(sys, "frozen", False):
         # the website names each download FFScanner-<PIN>.exe, so the player doesn't have to type it
@@ -1845,14 +1874,15 @@ def online_session(server, interactive):
         if m:
             pin = m.group(1)
             print(f"  Session PIN {pin} (from the download)")
+    ask = "  Session PIN from the organizer" + (" (press Enter to scan offline): " if offline_allowed() else ": ")
     for attempt in range(3):
         if pin is None:
             if not interactive:
                 return None
-            pin = input("  Session PIN from the organizer (press Enter to scan offline): ").strip().replace(" ", "")
-        if not pin:
+            pin = input(ask).strip().replace(" ", "")
+        if not pin and offline_allowed():
             return None
-        if re.fullmatch(r"\d{8}", pin):
+        if re.fullmatch(r"\d{8}", pin or ""):
             code, data = http_json(f"{server}/api/scan?pin={pin}")
             if code == 200 and data.get("status") != "done":
                 return data
@@ -1863,7 +1893,8 @@ def online_session(server, interactive):
         pin = None
         if not interactive:
             return None
-    print("  Continuing offline. Upload the .json report to the website by hand later.")
+    if offline_allowed():
+        print("  Continuing offline. Upload the .json report to the website by hand later.")
     return None
 
 
@@ -1906,7 +1937,18 @@ def main():
             input("\n  Press Enter to close...")
         return 2
     server = (arg_value("--server") or cfg.get("server_url") or bundled_setting("server_url") or "").rstrip("/")
-    session = online_session(server, interactive) if server and "--offline" not in sys.argv else None
+    offline = "--offline" in sys.argv and offline_allowed()
+    session = online_session(server, interactive) if server and not offline else None
+    if session:
+        ok, msg = start_scan(server, session["pin"])
+        if not ok:
+            print(f"  {red}{msg}{reset}")
+            session = None
+    if not session and not offline_allowed():
+        print(f"  {red}This scanner needs a session PIN from a tournament organizer with an active FF Scanner plan.{reset}")
+        if interactive:
+            input("\n  Press Enter to close...")
+        return 2
     if session:
         games = cfg.get("games", {})
         game_keys = list(games) if session.get("game") == "all" else [session["game"]] if session.get("game") in games else list(games)[:1]

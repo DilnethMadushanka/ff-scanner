@@ -15,14 +15,14 @@ const BLURB = {
   accounts: "Windows accounts on the PC and Google accounts in the emulator or phone. More than one can mean a second account.",
 };
 const MODE = { pc: "PC + emulator", phone: "Android phone", both: "PC + phone" };
-let key = "", sessions = [], openPin = null, openReport = null, section = "summary", timer = null;
+let key = "", signup = false, sessions = [], openPin = null, openReport = null, section = "summary", timer = null;
 
-try { key = localStorage.getItem("ffscan-key") || ""; } catch (e) {}
+try { key = localStorage.getItem("ffscan-auth") || ""; } catch (e) {}
 
 async function api(path, opts = {}) {
-  const r = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "x-admin-key": key, ...(opts.headers || {}) } });
+  const r = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "x-auth": key, ...(opts.headers || {}) } });
   const data = await r.json().catch(() => ({}));
-  if (r.status === 401) { signOut("Your password was not accepted. Sign in again."); throw new Error("Wrong password."); }
+  if (r.status === 401) { signOut("Please sign in again."); throw new Error("Signed out."); }
   if (!r.ok) throw new Error(data.error || `Error ${r.status}`);
   return data;
 }
@@ -37,22 +37,59 @@ const pillText = s => verdictOf(s) === "LIVE" && s.total ? `LIVE ${s.step}/${s.t
 
 /* ---------- sign in ---------- */
 function signOut(message) {
-  key = ""; try { localStorage.removeItem("ffscan-key"); } catch (e) {}
+  key = ""; try { localStorage.removeItem("ffscan-auth"); } catch (e) {}
   clearInterval(timer); $("#app").hidden = true; $("#login-view").hidden = false;
   $("#login-msg").textContent = message || "";
 }
+function setSignup(on) {
+  signup = on;
+  $("#login-title").textContent = on ? "Create an organizer account" : "Sign in";
+  $("#login-go").textContent = on ? "Create account" : "Sign in";
+  $("#login-switch").textContent = on ? "Already have an account? Sign in" : "New organizer? Create an account";
+  $("#pw").autocomplete = on ? "new-password" : "current-password";
+  $("#login-msg").textContent = "";
+}
+$("#login-switch").addEventListener("click", e => { e.preventDefault(); setSignup(!signup); });
 $("#login-form").addEventListener("submit", async e => {
   e.preventDefault();
-  key = $("#pw").value;
   try {
-    const r = await fetch("/api/login", { method: "POST", headers: { "x-admin-key": key } });
+    const r = await fetch("/api/account", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: signup ? "signup" : "login", email: $("#email").value, password: $("#pw").value }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || "Sign-in failed.");
-    try { localStorage.setItem("ffscan-key", key); } catch (x) {}
+    key = d.token; $("#pw").value = "";
+    try { localStorage.setItem("ffscan-auth", key); } catch (x) {}
     start();
   } catch (err) { $("#login-msg").textContent = err.message; }
 });
-$("#logout").addEventListener("click", () => signOut());
+$("#logout").addEventListener("click", () => {
+  fetch("/api/account", { method: "POST", headers: { "Content-Type": "application/json", "x-auth": key }, body: '{"action":"logout"}' }).catch(() => {});
+  signOut();
+});
+
+/* ---------- plan ---------- */
+async function loadPlan() {
+  let a;
+  try { a = await api("/api/account"); } catch (e) { return; }
+  const p = a.plan, bar = $("#planbar"), full = p.limit != null && a.used >= p.limit;
+  const buy = Object.entries(a.checkout || {}).filter(([k]) => k !== p.plan || !p.active)
+    .map(([k, url]) => `<a class="btn${p.active ? "" : " primary"}" href="${esc(url)}" target="_blank" rel="noopener">${p.active ? "Switch to" : "Buy"} ${esc(a.plans[k].name)} · ${esc(a.plans[k].price)}</a>`).join("");
+  const manage = a.portal ? `<a class="btn" href="${esc(a.portal)}" target="_blank" rel="noopener">Manage billing</a>` : "";
+  bar.className = "planbar" + (p.active && !full ? "" : " off");
+  if (!p.active) {
+    bar.innerHTML = `<div><div class="lbl">${esc(a.email)}</div><div class="big">${p.plan ? `${esc(p.name)} plan ended` : "No active plan"}</div>
+      <div>Choose a plan to create session PINs. Pay with the same email; your plan turns on here within a minute.</div></div>
+      <div class="acts">${buy || "<span>Plans are not set up on this site yet.</span>"}${manage}</div>`;
+  } else {
+    const pct = p.limit ? Math.min(100, Math.round(a.used * 100 / p.limit)) : 0;
+    const when = p.until ? new Date(p.until).toLocaleDateString([], { month: "short", day: "numeric" }) : "";
+    const renew = p.status === "cancelled" ? `Ends ${esc(when)}` : when ? `Renews ${esc(when)}` : "";
+    bar.innerHTML = `<div><div class="lbl">${esc(a.email)}</div><div class="big">${esc(p.name)}</div><div>${renew}</div></div>
+      <div class="meter">${p.limit == null ? `<b>${a.used}</b> devices scanned this month` : `<b>${a.used} of ${p.limit}</b> devices scanned this month${full ? ". Upgrade to scan more." : ""}<div class="track"><i class="${full ? "full" : ""}" style="width:${pct}%"></i></div>`}</div>
+      <div class="acts">${p.plan === "owner" ? "" : buy}${manage}</div>`;
+  }
+  $("#new-form button[type=submit]").disabled = !p.active || full;
+}
 
 /* ---------- sessions ---------- */
 async function load() {
@@ -74,7 +111,7 @@ $("#new-form").addEventListener("submit", async e => {
       <div class="topbar"><button type="button" id="copy-pin">Copy PIN</button><button type="button" id="copy-link">Copy link</button></div>
       </div>`;
     $("#n-player").value = ""; setMsg("");
-    await load();
+    await load(); loadPlan();
   } catch (err) { setMsg(err.message, "err"); }
 });
 $("#created").addEventListener("click", async e => {
@@ -206,7 +243,7 @@ $("#detail").addEventListener("click", async e => {
 /* ---------- start ---------- */
 function start() {
   $("#login-view").hidden = true; $("#app").hidden = false;
-  load();
+  load(); loadPlan();
   clearInterval(timer);
   let tick = 0;
   timer = setInterval(async () => {
@@ -216,6 +253,7 @@ function start() {
     const watching = before && (before.status === "scanning" || before.status === "waiting");
     if (!watching && !sessions.some(isLive) && tick % 3) return; // every 15 s when nothing is running
     await load();
+    if (tick % 6 === 0) loadPlan();
     const now = openPin && sessions.find(s => s.pin === openPin);
     if (now && now.status !== "waiting" && (watching || before?.status !== now.status)) {
       if (before.status === "waiting") openScan(openPin); else openScan(openPin, true);

@@ -131,13 +131,15 @@ class App:
         self.pin_entry.pack(side="left", ipady=4)
         self.check_btn = self.button(row, "Use PIN", self.lookup_pin)
         self.check_btn.pack(side="left", padx=(10, 0))
-        self.session_lbl = self.label(c, "Type the 8-digit PIN from the organizer, or leave it empty to scan offline.",
+        self.session_lbl = self.label(c, "Type the 8-digit PIN from the organizer." +
+                                      (" Leave it empty to scan offline." if core.offline_allowed() else ""),
                                       10, MUT, wraplength=560)
         self.session_lbl.pack(fill="x", pady=(6, 0))
         if not self.server:
             self.pin_entry.configure(state="disabled")
             self.check_btn.configure(state="disabled")
-            self.session_lbl.configure(text="This scanner is not linked to a website. Choose the game below and scan offline.")
+            self.session_lbl.configure(text="This scanner is not linked to a website. Choose the game below and scan offline."
+                                       if core.offline_allowed() else "This scanner is not linked to a website, so it can't scan.")
 
         c2 = self.card()
         grid = tk.Frame(c2, bg=PANEL)
@@ -228,6 +230,9 @@ class App:
 
     # ------------------------------------------------------------------ screen 2: progress
     def start(self):
+        if not self.session and not core.offline_allowed():
+            self.session_lbl.configure(text="Enter the session PIN from the organizer and press Use PIN first.", fg=HI)
+            return
         if self.pin_var.get().strip() and not self.session and self.server:
             self.session_lbl.configure(text="Press Use PIN first, or clear the PIN to scan offline.", fg=HI)
             return
@@ -272,6 +277,10 @@ class App:
             self.q.put(("total", total))
             run_id = f"{core.random.SystemRandom().randint(0, 2**32):08x}"
             if self.session:
+                ok, msg = core.start_scan(self.server, pin)
+                if not ok:
+                    self.q.put(("refused", msg))
+                    return
                 self.live = core.LiveUploader(self.server, pin, lambda: core.report_data(
                     sc, started, self.admin, pin, player, run_id, live=True))
                 sc.on_change = self.live.changed
@@ -312,6 +321,8 @@ class App:
                     self.log.see("end")
                 elif kind == "done":
                     self.result_screen(*item[1:])
+                elif kind == "refused":
+                    self.message(f"The scan can't start: {item[1]}")
                 elif kind == "error":
                     self.message(f"The scan stopped with an error: {item[1]}")
         except queue.Empty:
