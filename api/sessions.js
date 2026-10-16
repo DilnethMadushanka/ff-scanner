@@ -1,7 +1,10 @@
 import { GAMES, SESSION_TTL, getJSON, newPin, pipeline, readBody, redis, send } from "../lib/store.js";
-import { devicesUsed, planOf, requireAccount } from "../lib/account.js";
+import { devicesUsed, isOwner, planOf, requireAccount } from "../lib/account.js";
 
-// GET: this organizer's sessions (newest first). POST {game, player, mode}: create a session PIN.
+// Every session ever made, for the owner. "sessions" holds the ones from before accounts existed.
+const ALL = ["sessions:all", "sessions"];
+
+// GET: this organizer's sessions (newest first); the owner gets everyone's. POST {game, player, mode}: create a session PIN.
 // A PIN can only be made while the plan is active and has devices left this month.
 export default async function handler(req, res) {
   const acct = await requireAccount(req, res);
@@ -9,13 +12,21 @@ export default async function handler(req, res) {
   const list = `sessions:${acct.id}`;
   try {
     if (req.method === "GET") {
-      const pins = await redis("ZREVRANGE", list, 0, 499);
-      if (!pins.length) return send(res, 200, { sessions: [] });
+      const owner = isOwner(acct);
+      const lists = owner ? ALL : [list];
+      const ranked = new Map();
+      for (const l of lists) {
+        const flat = await redis("ZREVRANGE", l, 0, 499, "WITHSCORES");
+        for (let i = 0; i < flat.length; i += 2) ranked.set(flat[i], Math.max(ranked.get(flat[i]) || 0, Number(flat[i + 1])));
+      }
+      const pins = [...ranked.keys()].sort((a, b) => ranked.get(b) - ranked.get(a)).slice(0, 500);
+      if (!pins.length) return send(res, 200, { sessions: [], owner });
       const raw = await pipeline(pins.map(p => ["GET", `session:${p}`]));
       const sessions = raw.filter(Boolean).map(s => JSON.parse(s));
       const gone = pins.filter((p, i) => !raw[i]);
-      if (gone.length) await redis("ZREM", list, ...gone); // expired sessions
-      return send(res, 200, { sessions });
+      if (gone.length) await pipeline(lists.map(l => ["ZREM", l, ...gone])); // expired sessions
+      if (owner) for (const s of sessions) s.org = s.org || (s.account ? "" : "Old password login");
+      return send(res, 200, { sessions, owner });
     }
     if (req.method === "POST") {
       const p = planOf(acct);
@@ -32,13 +43,14 @@ export default async function handler(req, res) {
       }
       const now = Date.now();
       const session = {
-        pin, account: acct.id, game, gameName: GAMES[game], player: String(player).slice(0, 60),
+        pin, account: acct.id, org: acct.email, game, gameName: GAMES[game], player: String(player).slice(0, 60),
         mode: ["pc", "phone", "both"].includes(mode) ? mode : "pc",
         status: "waiting", created: new Date(now).toISOString(),
       };
       await pipeline([
         ["SET", `session:${pin}`, JSON.stringify(session), "EX", SESSION_TTL],
         ["ZADD", list, now, pin],
+        ["ZADD", "sessions:all", now, pin],
       ]);
       return send(res, 201, { session });
     }
